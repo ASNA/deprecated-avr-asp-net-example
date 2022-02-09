@@ -1,0 +1,240 @@
+Using System
+Using System.Data
+Using System.Configuration
+Using System.Web
+Using System.Web.Security
+Using System.Web.UI
+Using System.Web.UI.WebControls
+Using System.Web.UI.WebControls.WebParts
+Using System.Web.UI.HtmlControls
+
+BegClass ListForm Access(*Public) Partial(*Yes) Extends(System.Web.UI.Page)
+
+    DclDB pgmDB DBName( "*Public/DG Net Local" ) 
+             
+    DclDiskFile  CustByName +
+          Type( *Input  ) + 
+          Org( *Indexed ) + 
+          Prefix( Cust_ ) + 
+          File( "Examples/CMastNewL2" ) +
+          DB( pgmDB ) +
+          ImpOpen( *No )  
+          
+    DclMemoryFile CustMem +
+          DBDesc( "*Public/DG Net Local" ) +
+          Prefix( Cust_ ) + 
+          FileDesc( "Examples/CMastNewL2" ) +          
+          ImpOpen( *No ) + 
+          RnmFmt( CustMemR )
+
+    // Global variable that controls number of rows in grid.
+    DclFld RecordsToRead Type( *Integer4 ) 
+    
+    // Global variables to store last customer name and number
+    // current in the grid.
+    DclFld LastCustomerNumber Like( Cust_CMCustNo ) 
+    DclFld LastCustomerName   Like( Cust_CMName )
+
+    //--------------------------------------------------------------------------
+    // Event handlers
+    //--------------------------------------------------------------------------
+    BegSr btnNext_Click Access(*Private) Event(*This.btnNext.Click)
+        // Next button clicked.
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+
+        // Search for customer.
+        SearchForCustomer( LastCustomerName, LastCustomerNumber )             
+        // Load grid with records.
+        LoadGrid()		    
+    EndSr
+
+    BegSr btnSearch_Click Access(*Private) Event(*This.btnSearch.Click)
+        // Search button clicked.
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+
+        // If the search was successful...
+        If ( SearchForCustomer( txtSearch.Text.Trim(), 0 ) )
+            // Load the grid with records.
+            LoadGrid()
+            // Clear search value.
+            txtSearch.Text = String.Empty             		    
+            // Clear search message.
+            lblSearchMessage.Text = String.Empty
+        Else
+            // Set search message.
+            lblSearchMessage.Text = "Search failed."
+            // Position cursor at search text.
+            txtSearch.Focus()        
+        EndIf 		
+    EndSr
+
+    BegSr gvCust_SelectedIndexChanged Access(*Private) + 
+                                      Event(*This.gvCust.SelectedIndexChanged)
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+        
+        // Declare a variable for the selected row position.
+        DclFld SelectedRow Type( *Integer4 ) 
+        
+        // Get the selected row's ordinal position.
+        SelectedRow = gvCust.SelectedIndex
+        
+        // Fetch values from the given row and column for 
+        // key values to pass as session variables to the next page.
+        Session[ "customernumber" ] = +
+              gvCust.DataKeys[ SelectedRow ][ "cmcustno" ].ToString()		
+              
+        Session[ "cancelcustomernumber" ] = +
+              gvCust.DataKeys[ 0 ][ "cmcustno" ].ToString()
+              
+        Session[ "cancelcustomername" ] = +
+             gvCust.DataKeys[ 0 ][ "cmname"   ].ToString()
+        
+        // Redirect control to the AddUpdate.aspx page.
+        Response.Redirect( "AddUpdate.aspx" ) 
+    EndSr
+
+    BegSr Page_Load Access(*Private) Event(*This.Load)
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+
+        // Clear search text.
+        lblSearchMessage.Text = String.Empty 		
+        // Set number of records to read.
+        RecordsToRead = gvCust.PageSize
+        
+        // Open DB connection and files.
+        OpenData()
+        
+        If ( NOT *This.IsPostBack )
+            // Assign key values to save for each grid row.
+            AssignDataKeyNames()                
+            // Attempt to set the initial position of the list.
+            SetListStartPosition()
+            // If page displayed for the first time, 
+            // load grid with initial rows.
+            LoadGrid()
+        Else
+            // Each subsequent time the page is displayed, restore global
+            // variables from ViewState variables.
+            RestoreSavedValues()         
+        EndIf
+    EndSr
+    
+    BegSr Page_Unload Access(*Private) Event(*This.Unload)
+        // Raised just before response leaves the server.
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+        
+        // Close files and DB connection.
+        CloseData()
+    EndSr
+    
+    //--------------------------------------------------------------------------
+    // Private subroutines and functions.
+    //--------------------------------------------------------------------------
+    BegSr AssignDataKeyNames
+        // Specify field names to save to later fetch key values for a given
+        // GridView row.
+        DclArray KeyNames Type( *String ) Dim( 2 )         
+        KeyNames[ 0 ] = "cmcustno"
+        KeyNames[ 1 ] = "cmname"
+        
+        gvCust.DataKeyNames = KeyNames
+    EndSr                            
+    
+    BegSr CloseData 
+        // Close CustByName file.
+        Close CustByName
+        // Close CustMem file.
+        Close CustMem
+        // Disconnect DB connection.
+        Disconnect pgmDB 
+    EndSr	
+
+    BegSr LoadGrid 
+        // Starting at current file position, read next x records,
+        // writing them to the memory file then binding them to the grid.
+        Do FromVal( 1 ) ToVal( *This.RecordsToRead ) 
+            Read CustByName
+            If ( CustByName.IsEof ) 
+                Leave
+            EndIf
+            Write CustMem
+        EndDo 
+        
+        // Save last customer name and number displayed.
+        LastCustomerName   = Cust_CMName 
+        LastCustomerNumber = Cust_CMCustNo
+        
+        // Save last customer name and number displayed to 
+        // ViewState to persist values across page instances.
+        ViewState[ "lastcustomername"   ] = Cust_CMName 
+        ViewState[ "lastcustomernumber" ] = Cust_CMCustNo
+
+        // Set zeroth table in the CustMem's DataSet as the
+        // datasource.
+        gvCust.DataSource = CustMem.GetFileData()
+        // "Bind" the datasource data to the grid. This step 
+        // causes the grid's HTML to be generated.
+        gvCust.DataBind() 
+        
+        // Should the Next button be enabled?
+        btnNext.Enabled = MoreRecordsForward() 
+    EndSr	
+
+    BegFunc MoreRecordsForward Type( *Boolean ) Access( *Public )
+        // See if there are records beyond the last row.
+
+        SetGT CustByName Key( *This.LastCustomerName, *This.LastCustomerNumber )
+        LeaveSr CustByName.IsFound 
+    EndFunc 	
+    
+    BegSr OpenData Access( *Public )
+        // Open DB connection.
+        Connect pgmDB
+        // Open CustByName file.
+        Open CustByName
+        // Open MemoryFile.
+        Open CustMem
+    EndSr
+
+    BegSr RestoreSavedValues
+        // Restore global variables from ViewState.
+        LastCustomerName   = ViewState[ "lastcustomername"   ].ToString()
+        LastCustomerNumber = ViewState[ "lastcustomernumber" ].ToString()
+    EndSr 
+    
+    BegFunc SearchForCustomer Type( *Boolean ) 
+        // Search for a customer.
+        DclSrParm CustomerName   Like( Cust_CMName ) 
+        DclSrParm CustomerNumber Like( Cust_CMCustNo ) 
+        
+        // Set lower limits at name and number provided.
+        SetLL CustByName Key( CustomerName, CustomerNumber )
+
+        // Return value is boolean indicating if search was successful.
+        LeaveSr CustByName.IsFound
+    EndFunc
+    
+    BegSr SetListStartPosition
+        // Attempt to set the list starting position.
+        If ( Session[ "customernumber"  ] <> *Nothing ) AND + 
+           ( Session[ "customername"    ] <> *Nothing ) 
+
+            Cust_CMName   = Session[ "customername"    ].ToString() 
+            Cust_CMCustNo = Session[ "customernumber"  ].ToString() 
+            If ( NOT SearchForCustomer( Cust_CMName, Cust_CMCustNo ) )
+                SetLL CustByName Key( *Start ) 
+            EndIf  
+            
+            Session.Remove( "customernumber" ) 
+            Session.Remove( "customername" ) 
+        EndIf           
+    EndSr
+
+EndClass
+
+

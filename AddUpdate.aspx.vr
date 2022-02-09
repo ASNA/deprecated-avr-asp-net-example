@@ -1,0 +1,253 @@
+Using System
+Using System.Data
+Using System.Configuration
+Using System.Collections
+Using System.Web
+Using System.Web.Security
+Using System.Web.UI
+Using System.Web.UI.WebControls
+Using System.Web.UI.WebControls.WebParts
+Using System.Web.UI.HtmlControls
+Using System.Text.RegularExpressions
+
+BegClass AddUpdate Partial(*Yes) Access(*Public) Extends(System.Web.UI.Page)
+
+    DclDB pgmDB DBName( "*Public/DG Net Local" ) 
+         
+    DclDiskFile  CustByNumber +
+          Type( *Update ) + 
+          Org( *Indexed ) + 
+          Prefix( Cust_ ) + 
+          File( "Examples/CMastNewL1" ) +
+          DB( pgmDB ) +
+          ImpOpen( *No ) + 
+          AddRec( *Yes )
+
+    // The customer number being updated.
+    DclFld CustomerNumber       Like( Cust_CMCustNo )
+
+    // The name and number of the customer to which the grid is positioned
+    // if the update is canceled.
+    DclFld CancelCustomerName   Like( Cust_CMName )
+    DclFld CancelCustomerNumber Like( Cust_CMCustNo )
+
+    //--------------------------------------------------------------------------
+    // Event handlers.
+    //--------------------------------------------------------------------------
+    BegSr btnCancel_Click Access(*Private) Event(*This.btnCancel.Click)
+        // Fires when cancel button clicked.
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+
+        // Set customer name and number for grid positioning.
+        Session[ "CustomerName"   ] = *This.CancelCustomerName
+        Session[ "CustomerNumber" ] = *This.CancelCustomerNumber
+
+        // Remove unnecessary session variables.
+        RemoveSessionVariables()      
+
+        // Display the Default.aspx page.
+        Response.Redirect( "ListForm.aspx" ) 		    		
+    EndSr
+    
+    BegSr btnOK_Click Access(*Private) Event(*This.btnOK.Click)
+        // Fires when OK button clicked.
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+
+        // Perform server-side form validation.
+        ValidateForm()
+        If ( Page.IsValid ) 
+            // Update record with new data.
+            UpdateRecord( CustomerNumber )
+            
+            // Set customer name and number for grid positioning.
+            Session[ "customername"   ] = Cust_CMName
+            Session[ "customernumber" ] = Cust_CMCustNo 
+
+            // Remove unnecessary session variables.
+            RemoveSessionVariables()		    
+
+            // Display the Default.aspx page.
+            Response.Redirect( "ListForm.aspx" ) 		    		
+        EndIf
+    EndSr
+
+    BegSr Page_Load Access(*Private) Event(*This.Load)
+        // Fires each time page loads.
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+        
+        // Set button "clicked" when Enter is pressed when the panelUpdateControls
+        // has focus.
+        panelUpdateControls.DefaultButton = btnOK.ClientID
+        
+        PopulateStateDropDown()
+        
+        If ( NOT Page.IsPostBack )
+            // Occurs the first time the page loads.
+            // Load program global variables from session variables.
+            *This.CustomerNumber       = Session[ "customernumber"       ].ToString() 
+            *This.CancelCustomerNumber = Session[ "cancelcustomernumber" ].ToString() 
+            *This.CancelCustomerName   = Session[ "cancelcustomername"   ].ToString()  
+            
+            // Read a customer record for display.
+            ReadRecord( *This.CustomerNumber ) 
+        Else
+            // Restore global variables values.
+            RestoreGlobalVariables()
+        EndIf
+    EndSr
+    
+    BegSr Page_PreRender Access(*Private) Event(*This.PreRender)
+        // Fires just before server finishes with page response.
+        DclSrParm sender Type(*Object)
+        DclSrParm e Type(System.EventArgs)
+        
+        // PreRender is the last chance to reference Viewstate variables.
+        // By the time PageUnload fires the Viewstate is no longer available 
+        // to server-side code.
+
+        // Save global variables to persist across page instances.
+        SaveGlobalVariables()
+    EndSr
+
+    //--------------------------------------------------------------------------
+    // Subroutines and functions.
+    //--------------------------------------------------------------------------
+    BegSr CloseData Access( *Public ) 
+        // Close CustByNumber.
+        Close CustByNumber
+        
+        // Disconnect DB connection.
+        Disconnect pgmDB 
+    EndSr	
+
+    BegSr OpenData Access( *Public )
+        // Open DB connection.
+        Connect pgmDB
+        // Open Cust file.
+        Open CustByNumber
+    EndSr  
+    
+    BegSr PopulateRecordFromUI
+        // Populate the record format from the user interface.
+        Cust_CMName     = txtCMName.Text        
+        Cust_CMAddr1    = txtCMAddr1.Text
+        Cust_CMCity     = txtCMCity.Text
+        Cust_CMState    = txtCMState.Text
+        Cust_CMPostCode = txtCMPostCode.Text
+        Cust_CMFax      = RemoveNonNumericCharacters( txtCMFax.Text )
+        Cust_CMPhone    = txtCMPhone.Text
+        
+        Cust_CMState    = dropdownlistCMState.SelectedValue
+    EndSr
+    
+    BegSr PopulateUIFromRecord
+        // Populate the user interface from the record format.
+        txtCMCustNo.Text   = CustomerNumber.ToString()
+        txtCMName.Text     = Cust_CMName.Trim()
+        txtCMAddr1.Text    = Cust_CMAddr1.Trim()
+        txtCMCity.Text     = Cust_CMCity.Trim()
+        txtCMState.Text    = Cust_CMState.Trim()
+        txtCMPostCode.Text = Cust_CMPostCode.Trim()        
+        txtCMFax.Text      = Cust_CMFax.ToString( "(000) 000-0000" ) 
+        txtCMPhone.Text    = Cust_CMPhone.Trim()
+        
+        dropdownlistCMState.SelectedValue = Cust_CMState
+    EndSr 
+    
+    BegFunc ReadRecord Type( *Boolean )
+        // Read the customer record for display.
+        DclSrParm CustomerNumber Like( Cust_CMCustNo ) 
+        
+        // Connect DB and open files.
+        OpenData()
+    
+        // Read the record--do not lock the record.
+        Chain CustByNumber Key( CustomerNumber ) Access( *NoLock ) 
+        If ( CustByNumber.IsFound ) 
+            // Populate the UI if record is found.
+            PopulateUIFromRecord()
+        Else
+            // Error handling code here.
+        EndIf
+        
+        // Close files and disconnect.
+        CloseData()
+
+        // Assume the best for now!
+        LeaveSr *True 
+    EndFunc
+    
+    BegFunc RemoveNonNumericCharacters Type( *String ) 
+        // Use a regular expression to remove all non-numeric characters
+        // from an input string.
+        DclSrParm Value Type( *String ) 
+        
+        // [^0-9] is the regular expression that searches a string
+        // for all occurrence of non-numeric values.
+        LeaveSr Regex.Replace( Value, "[^0-9]", String.Empty )     
+    EndFunc
+    
+    BegSr RemoveSessionVariables
+        // Remove session variables.
+        Session.Remove( "cancelnumber" )
+        Session.Remove( "cancelname"   )
+    EndSr
+    
+    BegSr RestoreGlobalVariables
+        // Load program global variables from viewstate variables.
+        *This.CustomerNumber       = Viewstate[ "customernumber"       ].ToString()
+        *This.CancelCustomerNumber = Viewstate[ "cancelcustomernumber" ].ToString()
+        *This.CancelCustomerName   = Viewstate[ "cancelcustomername"   ].ToString()
+    EndSr
+    
+    BegSr SaveGlobalVariables
+        // Save program variables to viewstate variables.
+        Viewstate[ "customernumber"       ] = *This.CustomerNumber       
+        Viewstate[ "cancelcustomername"   ] = *This.CancelCustomerName   
+        Viewstate[ "cancelcustomernumber" ] = *This.CancelCustomerNumber 
+    EndSr            
+
+    BegSr ValidateForm
+        // Perform server-side custom validation.
+        If ( RegEx.Match( txtCMCity.Text, "[0-9]" ).Success ) 
+            validateCMCity.IsValid = *False
+        EndIf  
+    EndSr
+
+    BegFunc UpdateRecord Type( *Boolean )
+        // Update the customer record.
+        DclSrParm CustomerNumber Like( Cust_CMCustNo ) 
+    
+        // Connect DB and open files.
+        OpenData()
+
+        // Read record for update.
+        Chain CustByNumber Key( CustomerNumber ) 
+        If ( CustByNumber.IsFound ) 
+            // If record found, populate its fields and update it.
+            PopulateRecordFromUI()
+            Update CustByNumber
+        Else
+            // Error handling code here.
+        EndIf
+
+        // Close files and disconnect.
+        CloseData()
+
+        // Assume the best for now!
+        LeaveSr *True 
+    EndFunc
+    
+    BegSr PopulateStateDropDown
+        DclFld sl Type( StateList ) 
+        DclArray states Type(ListItem) Rank(1)
+        
+        sl = *New StateList( pgmDB )
+        states = sl.GetListAsArray()
+        dropdownlistCMState.Items.AddRange( states )            
+    EndSr
+    
+EndClass

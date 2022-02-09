@@ -1,0 +1,58 @@
+Using System
+Using System.Data 
+Using System.Web.UI.WebControls
+
+BegClass StateList Access( *Public ) 
+    DclDB pgmDB DBName( "*Public/DG Net Local" ) 
+
+    DclDiskFile  States +
+          Type( *Input  ) +
+          Org( *Indexed ) +
+          Prefix( States_ ) +
+          File( "Devo/States" ) +
+          DB( pgmDB ) +
+          ImpOpen( *No )  
+
+    BegFunc GetListAsArray Type( ListItem ) Rank( 1 ) Access( *Public ) 
+        DclArray Result Type( ListItem ) Rank( 1 ) 
+        DclFld   i      Type( *Integer4 ) 
+
+        OpenData()
+
+        // Allocate the Result array to the correct number of elements.
+        Result = *New ListItem[ States.RecCount ]
+
+        Read States
+        DoWhile ( NOT States.IsEof )
+            //
+            // Either of these may need a ToString().
+            //
+            Result[ i ] = *New ListItem( States_State.Trim(), States_Abbrev )
+            // i += 1 
+            i = i + 1 
+            Read States
+        EndDo 
+
+        CloseData()
+
+        LeaveSr Result 
+    EndFunc          
+
+    BegSr OpenData 
+        If ( NOT pgmDB.IsOpen ) 
+            Connect pgmDB 
+        EndIf     
+        Open    States
+    EndSr
+
+    BegSr CloseData
+        Close States
+    EndSr          
+    
+    BegConstructor Access(*Public)
+        DclSrParm pgmDB Type( ASNA.VisualRPG.Runtime.Database ) 
+
+        *This.pgmDb = pgmDB
+    EndConstructor
+
+EndClass

@@ -1,0 +1,25 @@
+body
+{
+    font-family: Verdana, Tahoma, Arial;
+    background-color: #cccccc;
+    margin: 0 0 0 0;
+    font-size: 1em;
+}
+
+.FixedSizeText 
+{
+    font-size: 10pt;
+}
+
+.ErrorText 
+{
+    font-size: 7pt;
+}
+
+.MediumText {   
+    font-size: .8em;
+}
+
+.NonDisplay {
+    display: none;
+}
